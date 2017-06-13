@@ -15,6 +15,14 @@
 #include "bsp.h"
 #include "bsp_btn_ble.h"
 
+#include "project.h"
+#include "ws2812b_drive.h"
+#include "i2s_ws2812b_drive.h"
+
+#include "nrf_drv_i2s.h"
+#include "nrf_delay.h"
+#include "boards.h"
+
 #define IS_SRVC_CHANGED_CHARACT_PRESENT 0                                           /**< Include the service_changed characteristic. If not enabled, the server's database cannot be changed for the lifetime of the device. */
 
 #if (NRF_SD_BLE_API_VERSION == 3)
@@ -48,36 +56,20 @@
 #define UART_TX_BUF_SIZE                256                                         /**< UART TX buffer size. */
 #define UART_RX_BUF_SIZE                256                                         /**< UART RX buffer size. */
 
+#define	I2S_STDO_PIN	                25
+
+
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
 
-/**@brief Function for assert macro callback.
- *
- * @details This function will be called in case of an assert in the SoftDevice.
- *
- * @warning This handler is an example only and does not fit a final product. You need to analyse
- *          how your product is supposed to react in case of Assert.
- * @warning On assert from the SoftDevice, the system can only recover on reset.
- *
- * @param[in] line_num    Line number of the failing ASSERT call.
- * @param[in] p_file_name File name of the failing ASSERT call.
- */
-void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name)
-{
+void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name){
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
 }
 
-
-/**@brief Function for the GAP initialization.
- *
- * @details This function will set up all the necessary GAP (Generic Access Profile) parameters of
- *          the device. It also sets the permissions and appearance.
- */
-static void gap_params_init(void)
-{
+static void gap_params_init(void){
     uint32_t                err_code;
     ble_gap_conn_params_t   gap_conn_params;
     ble_gap_conn_sec_mode_t sec_mode;
@@ -100,19 +92,7 @@ static void gap_params_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for handling the data from the Nordic UART Service.
- *
- * @details This function will process the data received from the Nordic UART BLE Service and send
- *          it to the UART module.
- *
- * @param[in] p_nus    Nordic UART Service structure.
- * @param[in] p_data   Data to be send to UART module.
- * @param[in] length   Length of the data.
- */
-/**@snippet [Handling the data received over BLE] */
-static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length)
-{
+static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length){
     for (uint32_t i = 0; i < length; i++)
     {
         while (app_uart_put(p_data[i]) != NRF_SUCCESS);
@@ -120,13 +100,8 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     while (app_uart_put('\r') != NRF_SUCCESS);
     while (app_uart_put('\n') != NRF_SUCCESS);
 }
-/**@snippet [Handling the data received over BLE] */
 
-
-/**@brief Function for initializing services that will be used by the application.
- */
-static void services_init(void)
-{
+static void services_init(void){
     uint32_t       err_code;
     ble_nus_init_t nus_init;
 
@@ -138,20 +113,7 @@ static void services_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for handling an event from the Connection Parameters Module.
- *
- * @details This function will be called for all events in the Connection Parameters Module
- *          which are passed to the application.
- *
- * @note All this function does is to disconnect. This could have been done by simply setting
- *       the disconnect_on_fail config parameter, but instead we use the event handler
- *       mechanism to demonstrate its use.
- *
- * @param[in] p_evt  Event received from the Connection Parameters Module.
- */
-static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
-{
+static void on_conn_params_evt(ble_conn_params_evt_t * p_evt){
     uint32_t err_code;
 
     if (p_evt->evt_type == BLE_CONN_PARAMS_EVT_FAILED)
@@ -161,21 +123,11 @@ static void on_conn_params_evt(ble_conn_params_evt_t * p_evt)
     }
 }
 
-
-/**@brief Function for handling errors from the Connection Parameters module.
- *
- * @param[in] nrf_error  Error code containing information about what went wrong.
- */
-static void conn_params_error_handler(uint32_t nrf_error)
-{
+static void conn_params_error_handler(uint32_t nrf_error){
     APP_ERROR_HANDLER(nrf_error);
 }
 
-
-/**@brief Function for initializing the Connection Parameters module.
- */
-static void conn_params_init(void)
-{
+static void conn_params_init(void){
     uint32_t               err_code;
     ble_conn_params_init_t cp_init;
 
@@ -194,13 +146,7 @@ static void conn_params_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for putting the chip into sleep mode.
- *
- * @note This function will not return.
- */
-static void sleep_mode_enter(void)
-{
+static void sleep_mode_enter(void){
     uint32_t err_code = bsp_indication_set(BSP_INDICATE_IDLE);
     APP_ERROR_CHECK(err_code);
 
@@ -213,15 +159,7 @@ static void sleep_mode_enter(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for handling advertising events.
- *
- * @details This function will be called for advertising events which are passed to the application.
- *
- * @param[in] ble_adv_evt  Advertising event.
- */
-static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
-{
+static void on_adv_evt(ble_adv_evt_t ble_adv_evt){
     uint32_t err_code;
 
     switch (ble_adv_evt)
@@ -238,13 +176,7 @@ static void on_adv_evt(ble_adv_evt_t ble_adv_evt)
     }
 }
 
-
-/**@brief Function for the application's SoftDevice event handler.
- *
- * @param[in] p_ble_evt SoftDevice event.
- */
-static void on_ble_evt(ble_evt_t * p_ble_evt)
-{
+static void on_ble_evt(ble_evt_t * p_ble_evt){
     uint32_t err_code;
 
     switch (p_ble_evt->header.evt_id)
@@ -335,17 +267,7 @@ static void on_ble_evt(ble_evt_t * p_ble_evt)
     }
 }
 
-
-/**@brief Function for dispatching a SoftDevice event to all modules with a SoftDevice
- *        event handler.
- *
- * @details This function is called from the SoftDevice event interrupt handler after a
- *          SoftDevice event has been received.
- *
- * @param[in] p_ble_evt  SoftDevice event.
- */
-static void ble_evt_dispatch(ble_evt_t * p_ble_evt)
-{
+static void ble_evt_dispatch(ble_evt_t * p_ble_evt){
     ble_conn_params_on_ble_evt(p_ble_evt);
     ble_nus_on_ble_evt(&m_nus, p_ble_evt);
     on_ble_evt(p_ble_evt);
@@ -354,13 +276,7 @@ static void ble_evt_dispatch(ble_evt_t * p_ble_evt)
 
 }
 
-
-/**@brief Function for the SoftDevice initialization.
- *
- * @details This function initializes the SoftDevice and the BLE event interrupt.
- */
-static void ble_stack_init(void)
-{
+static void ble_stack_init(void){
     uint32_t err_code;
 
     nrf_clock_lf_cfg_t clock_lf_cfg = NRF_CLOCK_LFCLKSRC;
@@ -389,13 +305,7 @@ static void ble_stack_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for handling events from the BSP module.
- *
- * @param[in]   event   Event generated by button press.
- */
-void bsp_event_handler(bsp_event_t event)
-{
+void bsp_event_handler(bsp_event_t event){
     uint32_t err_code;
     switch (event)
     {
@@ -427,17 +337,7 @@ void bsp_event_handler(bsp_event_t event)
     }
 }
 
-
-/**@brief   Function for handling app_uart events.
- *
- * @details This function will receive a single character from the app_uart module and append it to
- *          a string. The string will be be sent over BLE when the last character received was a
- *          'new line' i.e '\r\n' (hex 0x0D) or if the string has reached a length of
- *          @ref NUS_MAX_DATA_LENGTH.
- */
-/**@snippet [Handling the data received over UART] */
-void uart_event_handle(app_uart_evt_t * p_event)
-{
+void uart_event_handle(app_uart_evt_t * p_event){
     static uint8_t data_array[BLE_NUS_MAX_DATA_LEN];
     static uint8_t index = 0;
     uint32_t       err_code;
@@ -472,14 +372,8 @@ void uart_event_handle(app_uart_evt_t * p_event)
             break;
     }
 }
-/**@snippet [Handling the data received over UART] */
 
-
-/**@brief  Function for initializing the UART module.
- */
-/**@snippet [UART Initialization] */
-static void uart_init(void)
-{
+static void uart_init(void){
     uint32_t                     err_code;
     const app_uart_comm_params_t comm_params =
     {
@@ -500,13 +394,8 @@ static void uart_init(void)
                        err_code);
     APP_ERROR_CHECK(err_code);
 }
-/**@snippet [UART Initialization] */
 
-
-/**@brief Function for initializing the Advertising functionality.
- */
-static void advertising_init(void)
-{
+static void advertising_init(void){
     uint32_t               err_code;
     ble_advdata_t          advdata;
     ble_advdata_t          scanrsp;
@@ -531,13 +420,7 @@ static void advertising_init(void)
     APP_ERROR_CHECK(err_code);
 }
 
-
-/**@brief Function for initializing buttons and leds.
- *
- * @param[out] p_erase_bonds  Will be true if the clear bonding button was pressed to wake the application up.
- */
-static void buttons_leds_init(bool * p_erase_bonds)
-{
+static void buttons_leds_init(bool * p_erase_bonds){
     bsp_event_t startup_event;
 
     uint32_t err_code = bsp_init(BSP_INIT_LED | BSP_INIT_BUTTONS,
@@ -551,43 +434,166 @@ static void buttons_leds_init(bool * p_erase_bonds)
     *p_erase_bonds = (startup_event == BSP_EVENT_CLEAR_BONDING_DATA);
 }
 
-
-/**@brief Function for placing the application in low power state while waiting for events.
- */
-static void power_manage(void)
-{
+static void power_manage(void){
     uint32_t err_code = sd_app_evt_wait();
     APP_ERROR_CHECK(err_code);
 }
 
+int main(void){
+    
+  uint8_t  lumin = 1;
+  uint16_t wait = 50;
+  
+  uint16_t color1 = 0;
+  uint16_t color2 = 100;
+  uint16_t color3 = 255;
+  
+  uint32_t err_code;
+  bool erase_bonds;
+    
+  rgb_led_t led_array[NUM_LEDS];
+    
+  for(int i = 0; i < 60; i++) led_array[i].red = 255;
 
-/**@brief Application main function.
- */
-int main(void)
-{
-    uint32_t err_code;
-    bool erase_bonds;
+  // Initialize.
+  APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
+        
+  ws2812b_drive_set_blank(led_array, NUM_LEDS);
+  i2s_ws2812b_drive_xfer (led_array, NUM_LEDS, I2S_STDO_PIN);
 
-    // Initialize.
-    APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
-    uart_init();
+    
+  uart_init();
 
-    buttons_leds_init(&erase_bonds);
-    ble_stack_init();
-    gap_params_init();
-    services_init();
-    advertising_init();
-    conn_params_init();
+  buttons_leds_init(&erase_bonds);
+  ble_stack_init();
+  gap_params_init();
+  services_init();
+  advertising_init();
+  conn_params_init();
 
-    printf("\r\nUART Start!\r\n");
-    err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
-    APP_ERROR_CHECK(err_code);
-
-    // Enter main loop.
-    for (;;)
+  printf("\r\nUART Start!\r\n");
+  err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+  APP_ERROR_CHECK(err_code);
+    
+    
+  while(1){
+       
+    power_manage();
+    
+    for(int i = 0; i < 10; i++)
     {
-        power_manage();
+      for(int i = 0; i < 13; i++)
+      {
+        led_array[i].red   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      for(int i = 13; i < 26; i++)
+      {
+        led_array[i].green   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      
+      for(int i = 26; i < 39; i++)
+      {
+        led_array[i].blue   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+
+      for(int i = 39; i < 52; i++)
+      {
+        led_array[i].green   = lumin;
+        led_array[i].red   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      
+      for(int i = 52; i < 60; i++)
+      {
+        led_array[i].red  = lumin;
+        led_array[i].blue   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      lumin = (lumin + 24);
     }
+   // ws2812b_drive_set_blank(led_array, NUM_LEDS);
+    
+    
+     for(int i = 0; i < 100; i++)
+      {
+        led_array[i].green   = color1++;
+        led_array[i].red    = color2--;
+        led_array[i].blue   = color3--;
+      }
+    
+    
+    for(int i = 0; i < 60; i++)
+    {
+      
+        led_array[i].red     = led_array[i].green;
+        led_array[i].green   = led_array[i].blue;
+        led_array[i].blue    = led_array[i].red;
+      
+        i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+        nrf_delay_ms(100);
+    }
+    
+    
+    for(int i = 0; i < 20; i++)
+    {
+      for(int i = 0; i < 13; i++)
+      {
+        led_array[i].red   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      for(int i = 13; i < 26; i++)
+      {
+        led_array[i].green   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      
+      for(int i = 26; i < 39; i++)
+      {
+        led_array[i].blue   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+
+      for(int i = 39; i < 52; i++)
+      {
+        led_array[i].green   = lumin;
+        led_array[i].red   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      
+      
+      for(int i = 52; i < 60; i++)
+      {
+        led_array[i].red  = lumin;
+        led_array[i].blue   = lumin;
+      }
+      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
+      nrf_delay_ms(wait);
+      lumin = (lumin - 24);
+    }
+    ws2812b_drive_set_blank(led_array, NUM_LEDS);
+    
+
+  }
+    
 }
 
 

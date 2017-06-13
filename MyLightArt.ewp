@@ -456,6 +456,7 @@
                     <state>$PROJ_DIR$\components\toolchain</state>
                     <state>$PROJ_DIR$\components\toolchain\cmsis\include</state>
                     <state>$PROJ_DIR$\external\segger_rtt</state>
+                    <state>$PROJ_DIR$\external\user</state>
                     <state>$PROJ_DIR$\config</state>
                 </option>
                 <option>
@@ -2218,6 +2219,9 @@
             <name>$PROJ_DIR$\components\drivers_nrf\gpiote\nrf_drv_gpiote.c</name>
         </file>
         <file>
+            <name>$PROJ_DIR$\components\drivers_nrf\i2s\nrf_drv_i2s.c</name>
+        </file>
+        <file>
             <name>$PROJ_DIR$\components\drivers_nrf\uart\nrf_drv_uart.c</name>
         </file>
     </group>
@@ -2285,6 +2289,15 @@
         <name>nRF_SoftDevice</name>
         <file>
             <name>$PROJ_DIR$\components\softdevice\common\softdevice_handler\softdevice_handler.c</name>
+        </file>
+    </group>
+    <group>
+        <name>User</name>
+        <file>
+            <name>$PROJ_DIR$\external\user\i2s_ws2812b_drive.c</name>
+        </file>
+        <file>
+            <name>$PROJ_DIR$\external\user\ws2812b_drive.c</name>
         </file>
     </group>
 </project>
