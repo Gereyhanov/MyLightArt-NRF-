@@ -18,10 +18,12 @@
 #include "project.h"
 #include "ws2812b_drive.h"
 #include "i2s_ws2812b_drive.h"
+#include "user_defines.h"
 
 #include "nrf_drv_i2s.h"
 #include "nrf_delay.h"
 #include "boards.h"
+
 
 #define IS_SRVC_CHANGED_CHARACT_PRESENT 0                                           /**< Include the service_changed characteristic. If not enabled, the server's database cannot be changed for the lifetime of the device. */
 
@@ -68,7 +70,9 @@ rgb_led_t                               led_array[NUM_LEDS];
 
 void error_handler(char *err, char *mess){
  
-  printf("\r\nError %s: %s...\r\n", err, mess);
+  printf(RED);
+  printf("Error %s: %s...\r\n", err, mess);
+  printf(BLACK);
 
 }
 
@@ -156,13 +160,12 @@ void parseColor(char *color_string, rgb_led_t *rgb_color){
     uint8_t hex_color[2];
     rgb_led_t temp_rgb_color;
 
-    if(!is_hex(color_string)) error_handler("parse color", "inccorect hex string"); 
-    //TODO
+    if(is_hex(color_string)) error_handler("parse color", "inccorect hex string"); 
 
     hex_color[0] = color_string[0];
     hex_color[1] = color_string[1];
     temp_rgb_color.red = (uint8_t)hex2int(hex_color);
-    
+     
     hex_color[0] = color_string[2];
     hex_color[1] = color_string[3];
     temp_rgb_color.green = (uint8_t)hex2int(hex_color);
@@ -207,10 +210,8 @@ static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t lengt
     {
         while (app_uart_put(p_data[i]) != NRF_SUCCESS);
     }
-    
     while (app_uart_put('\r') != NRF_SUCCESS);
     while (app_uart_put('\n') != NRF_SUCCESS);
-    
 
     uint8_t   color_pixel_str[6];
     uint8_t   num_pixel_str[3];
@@ -592,20 +593,32 @@ int main(void){
   APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
 
   uart_init();
+  printf(CLS);
+  printf("Start system.....ok\r\n");
   buttons_leds_init(&erase_bonds);
   ble_stack_init();
+  printf("BLE Stack Init.....ok\r\n");
   gap_params_init();
+  printf("GAP Params Init.....ok\r\n");
   services_init();
+  printf("Services Init.....ok\r\n");
   advertising_init();
+  printf("Advertising Init.....ok\r\n");
   conn_params_init();
-
-  printf("\r\nUART Start!\r\n");
-  err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
-  APP_ERROR_CHECK(err_code);
-    
-  ws2812b_drive_set_blank(led_array, NUM_LEDS);
-  i2s_ws2812b_drive_xfer (led_array, NUM_LEDS, I2S_STDO_PIN);  
+  printf("Conn Params Init.....ok\r\n");
   
+  err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
+  APP_ERROR_CHECK(err_code);  
+  
+  ws2812b_drive_set_blank(led_array, NUM_LEDS);
+  i2s_ws2812b_drive_xfer (led_array, NUM_LEDS, I2S_STDO_PIN);
+  printf("WS2812 Init.....ok\r\n");
+  
+  printf(BLUE);
+  printf("Successful launch\r\n");
+  printf(BLACK);
+    
+
   while(1){
        
     power_manage();
@@ -613,8 +626,3 @@ int main(void){
   }
     
 }
-
-
-/**
- * @}
- */
