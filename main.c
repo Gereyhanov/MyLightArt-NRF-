@@ -58,12 +58,121 @@
 
 #define	I2S_STDO_PIN	                25
 
-
 static ble_nus_t                        m_nus;                                      /**< Structure to identify the Nordic UART Service. */
 static uint16_t                         m_conn_handle = BLE_CONN_HANDLE_INVALID;    /**< Handle of the current connection. */
 
 static ble_uuid_t                       m_adv_uuids[] = {{BLE_UUID_NUS_SERVICE, NUS_SERVICE_UUID_TYPE}};  /**< Universally unique service identifier. */
 
+rgb_led_t                               led_array[NUM_LEDS];
+
+
+void error_handler(char *err, char *mess){
+ 
+  printf("\r\nError %s: %s...\r\n", err, mess);
+
+}
+
+void update_ws2812(rgb_led_t *led_arrays){
+  
+     i2s_ws2812b_drive_xfer (led_arrays, NUM_LEDS, I2S_STDO_PIN); 
+     
+}
+
+void reolad_ws2812(rgb_led_t *led_arrays){
+  
+     i2s_ws2812b_drive_xfer (led_arrays, NUM_LEDS, I2S_STDO_PIN); 
+     ws2812b_drive_set_blank(led_arrays, NUM_LEDS);
+}
+
+void user_atoi(char *string, uint8_t len, uint32_t *num){
+  
+	uint32_t tmp_num  = 0;
+	char *tmp_ptr = string + len - 1;
+	while (((*tmp_ptr < 0x30) || (*tmp_ptr > 0x39)) && (string != tmp_ptr)) tmp_ptr--;
+	
+	uint32_t mult=1;
+	while ((*tmp_ptr >= 0x30) && (*tmp_ptr <= 0x39))
+	{
+		tmp_num += (*tmp_ptr - 0x30) * mult;
+		mult *= 10;
+		tmp_ptr--;
+	}
+	
+	if (*tmp_ptr == '-')
+	{
+		tmp_num*=-1;
+	}
+	
+	*num = tmp_num;
+}
+
+uint32_t hex2int(uint8_t *hex) {
+    //hex string  convert it to a 32bit number (max 8 hex digits)
+    uint32_t val = 0;
+    while (*hex) {
+        // get current character then increment
+        char byte = *hex++; 
+        // transform hex character to the 4bit equivalent number, using the ascii table indexes
+        if (byte >= '0' && byte <= '9') byte = byte - '0';
+        else if (byte >= 'a' && byte <='f') byte = byte - 'a' + 10;
+        else if (byte >= 'A' && byte <='F') byte = byte - 'A' + 10;    
+        // shift 4 to make space for new digit, and add the 4 bits of the new digit 
+        val = (val << 4) | (byte & 0xF);
+    }
+    return val;
+}
+
+uint16_t atoi16_t(uint8_t *str, uint16_t len){
+	//direct conversion, without ASCII
+	uint16_t res = 0;
+	for (int i = 0; i < len; ++i) res = res*10 + str[i] - '0';
+	return res;
+}
+
+uint8_t is_num (char c) {
+	if ((c>='0') && (c<='9')) return 1;
+	return 0;
+}
+
+uint8_t is_hex (const char *str) {
+
+	 const char *curr = str; 
+	 while (*curr != 0)
+	 {
+		 if (('A' <= *curr && *curr <= 'F') || ('a' <= *curr && *curr <= 'f') || '0' <= *curr && *curr <= '9')
+		 {
+			 curr++;
+		 }
+		 else
+		 {
+			 return 0;
+		 }
+	 }
+	 return 1;
+}
+
+void parseColor(char *color_string, rgb_led_t *rgb_color){
+    
+    uint8_t hex_color[2];
+    rgb_led_t temp_rgb_color;
+
+    if(!is_hex(color_string)) error_handler("parse color", "inccorect hex string"); 
+    //TODO
+
+    hex_color[0] = color_string[0];
+    hex_color[1] = color_string[1];
+    temp_rgb_color.red = (uint8_t)hex2int(hex_color);
+    
+    hex_color[0] = color_string[2];
+    hex_color[1] = color_string[3];
+    temp_rgb_color.green = (uint8_t)hex2int(hex_color);
+    
+    hex_color[0] = color_string[4];
+    hex_color[1] = color_string[5];
+    temp_rgb_color.blue = (uint8_t)hex2int(hex_color);
+    
+    *rgb_color = temp_rgb_color;
+}
 
 void assert_nrf_callback(uint16_t line_num, const uint8_t * p_file_name){
     app_error_handler(DEAD_BEEF, line_num, p_file_name);
@@ -93,12 +202,47 @@ static void gap_params_init(void){
 }
 
 static void nus_data_handler(ble_nus_t * p_nus, uint8_t * p_data, uint16_t length){
+  
     for (uint32_t i = 0; i < length; i++)
     {
         while (app_uart_put(p_data[i]) != NRF_SUCCESS);
     }
+    
     while (app_uart_put('\r') != NRF_SUCCESS);
     while (app_uart_put('\n') != NRF_SUCCESS);
+    
+
+    uint8_t   color_pixel_str[6];
+    uint8_t   num_pixel_str[3];
+    uint16_t  num_pixel;
+    rgb_led_t rgb_color;
+  
+  
+    for (uint32_t i = 0; i < length; i++)
+    {
+      if(p_data[i] == 'C')
+      {
+        num_pixel_str[0] = p_data[i+1];
+        num_pixel_str[1] = p_data[i+2];
+        num_pixel_str[2] = p_data[i+3];
+        
+        num_pixel = atoi16_t(num_pixel_str, 3);
+
+        color_pixel_str[0] = p_data[i+4];
+        color_pixel_str[1] = p_data[i+5];
+        color_pixel_str[2] = p_data[i+6];
+        color_pixel_str[3] = p_data[i+7];
+        color_pixel_str[4] = p_data[i+8];
+        color_pixel_str[5] = p_data[i+9];
+        
+        parseColor((char*)color_pixel_str, &rgb_color);
+
+        led_array[num_pixel] = rgb_color;
+        
+        update_ws2812(led_array);
+      }
+    }
+    
 }
 
 static void services_init(void){
@@ -441,29 +585,13 @@ static void power_manage(void){
 
 int main(void){
     
-  uint8_t  lumin = 1;
-  uint16_t wait = 50;
-  
-  uint16_t color1 = 0;
-  uint16_t color2 = 100;
-  uint16_t color3 = 255;
-  
   uint32_t err_code;
   bool erase_bonds;
     
-  rgb_led_t led_array[NUM_LEDS];
-    
-  for(int i = 0; i < 60; i++) led_array[i].red = 255;
-
   // Initialize.
   APP_TIMER_INIT(APP_TIMER_PRESCALER, APP_TIMER_OP_QUEUE_SIZE, false);
-        
-  ws2812b_drive_set_blank(led_array, NUM_LEDS);
-  i2s_ws2812b_drive_xfer (led_array, NUM_LEDS, I2S_STDO_PIN);
 
-    
   uart_init();
-
   buttons_leds_init(&erase_bonds);
   ble_stack_init();
   gap_params_init();
@@ -475,123 +603,13 @@ int main(void){
   err_code = ble_advertising_start(BLE_ADV_MODE_FAST);
   APP_ERROR_CHECK(err_code);
     
-    
+  ws2812b_drive_set_blank(led_array, NUM_LEDS);
+  i2s_ws2812b_drive_xfer (led_array, NUM_LEDS, I2S_STDO_PIN);  
+  
   while(1){
        
     power_manage();
     
-    for(int i = 0; i < 10; i++)
-    {
-      for(int i = 0; i < 13; i++)
-      {
-        led_array[i].red   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      for(int i = 13; i < 26; i++)
-      {
-        led_array[i].green   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      
-      for(int i = 26; i < 39; i++)
-      {
-        led_array[i].blue   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-
-      for(int i = 39; i < 52; i++)
-      {
-        led_array[i].green   = lumin;
-        led_array[i].red   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      
-      for(int i = 52; i < 60; i++)
-      {
-        led_array[i].red  = lumin;
-        led_array[i].blue   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      lumin = (lumin + 24);
-    }
-   // ws2812b_drive_set_blank(led_array, NUM_LEDS);
-    
-    
-     for(int i = 0; i < 100; i++)
-      {
-        led_array[i].green   = color1++;
-        led_array[i].red    = color2--;
-        led_array[i].blue   = color3--;
-      }
-    
-    
-    for(int i = 0; i < 60; i++)
-    {
-      
-        led_array[i].red     = led_array[i].green;
-        led_array[i].green   = led_array[i].blue;
-        led_array[i].blue    = led_array[i].red;
-      
-        i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-        nrf_delay_ms(100);
-    }
-    
-    
-    for(int i = 0; i < 20; i++)
-    {
-      for(int i = 0; i < 13; i++)
-      {
-        led_array[i].red   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      for(int i = 13; i < 26; i++)
-      {
-        led_array[i].green   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      
-      for(int i = 26; i < 39; i++)
-      {
-        led_array[i].blue   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-
-      for(int i = 39; i < 52; i++)
-      {
-        led_array[i].green   = lumin;
-        led_array[i].red   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      
-      
-      for(int i = 52; i < 60; i++)
-      {
-        led_array[i].red  = lumin;
-        led_array[i].blue   = lumin;
-      }
-      i2s_ws2812b_drive_xfer(led_array, NUM_LEDS, I2S_STDO_PIN);
-      nrf_delay_ms(wait);
-      lumin = (lumin - 24);
-    }
-    ws2812b_drive_set_blank(led_array, NUM_LEDS);
-    
-
   }
     
 }
