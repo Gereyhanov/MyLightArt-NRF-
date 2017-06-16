@@ -88,7 +88,7 @@ void reolad_ws2812(rgb_led_t *led_arrays){
      ws2812b_drive_set_blank(led_arrays, NUM_LEDS);
 }
 
-void user_atoi(char *string, uint8_t len, uint32_t *num){
+void atoi32_t(char *string, uint8_t len, uint32_t *num){
   
 	uint32_t tmp_num  = 0;
 	char *tmp_ptr = string + len - 1;
